@@ -64,7 +64,7 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
         .select(`
           *,
           incident_categories(*),
-          profiles(*)
+          profiles!incidents_user_id_fkey(*)
         `)
         .order('created_at', { ascending: false });
 
