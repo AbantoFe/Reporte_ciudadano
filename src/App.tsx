@@ -22,7 +22,7 @@ function AuthPages() {
 
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.includes('type=recovery')) {
+    if (hash.includes('type=recovery') || hash.includes('/auth/reset')) {
       setAuthMode('reset');
     }
   }, []);
