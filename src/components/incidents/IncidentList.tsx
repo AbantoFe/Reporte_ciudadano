@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, MapPin, AlertCircle, Filter, Search } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Filter, Search, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Database } from '../../lib/database.types';
@@ -42,12 +42,15 @@ interface IncidentListProps {
 }
 
 export function IncidentList({ onSelectIncident }: IncidentListProps) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   useEffect(() => {
     loadIncidents();
@@ -55,7 +58,7 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
 
   useEffect(() => {
     filterIncidents();
-  }, [incidents, searchTerm, statusFilter]);
+  }, [incidents, searchTerm, statusFilter, startDate, endDate]);
 
   const loadIncidents = async () => {
     try {
@@ -80,6 +83,10 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
   const filterIncidents = () => {
     let filtered = [...incidents];
 
+    if (profile?.role === 'citizen') {
+      filtered = filtered.filter((incident) => incident.user_id === user?.id);
+    }
+
     if (searchTerm) {
       filtered = filtered.filter(
         (incident) =>
@@ -93,7 +100,43 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
       filtered = filtered.filter((incident) => incident.status === statusFilter);
     }
 
+    if (startDate) {
+      const start = new Date(startDate);
+      filtered = filtered.filter((incident) => new Date(incident.incident_date) >= start);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((incident) => new Date(incident.incident_date) <= end);
+    }
+
     setFilteredIncidents(filtered);
+  };
+
+  const handleDeleteIncident = async (e: React.MouseEvent, incidentId: string) => {
+    e.stopPropagation();
+
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este reporte?')) {
+      return;
+    }
+
+    setDeleting(incidentId);
+    try {
+      const { error } = await supabase
+        .from('incidents')
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq('id', incidentId);
+
+      if (error) throw error;
+
+      setIncidents(incidents.filter((i) => i.id !== incidentId));
+    } catch (err) {
+      console.error('Error deleting incident:', err);
+      alert('Error al eliminar el reporte');
+    } finally {
+      setDeleting(null);
+    }
   };
 
   if (loading) {
@@ -118,7 +161,7 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
           />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Filter className="w-5 h-5 text-gray-500" />
           <select
             value={statusFilter}
@@ -131,6 +174,36 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
             <option value="resolved">Resueltas</option>
             <option value="rejected">Rechazadas</option>
           </select>
+
+          {profile?.role === 'authority' && (
+            <>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title="Fecha inicio"
+              />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title="Fecha fin"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+                >
+                  Limpiar fechas
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -148,7 +221,7 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
               className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
+                <div className="flex-1 pr-4">
                   <div className="flex items-center gap-3 mb-2">
                     <span
                       className="px-3 py-1 rounded-full text-xs font-semibold"
@@ -191,6 +264,19 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
                   </div>
                 )}
               </div>
+
+              {profile?.role === 'citizen' && user?.id === incident.user_id && (
+                <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={(e) => handleDeleteIncident(e, incident.id)}
+                    disabled={deleting === incident.id}
+                    className="flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {deleting === incident.id ? 'Eliminando...' : 'Eliminar'}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
