@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .select('*')
         .eq('id', userId)
+        .eq('is_deleted', false)
         .maybeSingle();
 
       if (error) throw error;
@@ -70,6 +71,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, phone?: string) => {
     try {
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id, is_deleted')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingProfile && !existingProfile.is_deleted) {
+        throw new Error('Este correo electrónico ya está registrado');
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -78,17 +91,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email,
-            full_name: fullName,
-            phone: phone || null,
-            role: 'citizen',
-          });
+        if (existingProfile?.is_deleted) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({
+              full_name: fullName,
+              phone: phone || null,
+              is_deleted: false,
+              deleted_at: null,
+            })
+            .eq('id', existingProfile.id);
 
-        if (profileError) throw profileError;
+          if (updateError) throw updateError;
+        } else {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email,
+              full_name: fullName,
+              phone: phone || null,
+              role: 'citizen',
+            });
+
+          if (profileError) throw profileError;
+        }
       }
     } catch (error: any) {
       throw new Error(error.message || 'Error al registrarse');
