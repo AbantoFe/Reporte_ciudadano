@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, MapPin, Calendar, FileText, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { AlertCircle, CheckCircle, MapPin, Calendar, FileText, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
-import { Database } from '../../lib/database.types';
-
-type IncidentCategory = Database['public']['Tables']['incident_categories']['Row'];
+import { incidents, categories } from '../../lib/api';
+import { IncidentCategory } from '../../lib/types';
 
 interface IncidentFormProps {
   onSuccess?: () => void;
@@ -12,13 +10,13 @@ interface IncidentFormProps {
 
 export function IncidentForm({ onSuccess }: IncidentFormProps) {
   const { user } = useAuth();
-  const [categories, setCategories] = useState<IncidentCategory[]>([]);
+  const [categoriesList, setCategoriesList] = useState<IncidentCategory[]>([]);
   const [formData, setFormData] = useState({
-    categoryId: '',
+    category_id: '',
     title: '',
     description: '',
     address: '',
-    incidentDate: new Date().toISOString().slice(0, 16),
+    incident_date: new Date().toISOString().slice(0, 16),
     priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
   });
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -33,18 +31,14 @@ export function IncidentForm({ onSuccess }: IncidentFormProps) {
 
   const loadCategories = async () => {
     try {
-      const { data, error } = await supabase
-        .from('incident_categories')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setCategories(data || []);
+      const data = await categories.list();
+      setCategoriesList(data);
       if (data && data.length > 0) {
-        setFormData(prev => ({ ...prev, categoryId: data[0].id }));
+        setFormData(prev => ({ ...prev, category_id: data[0].id }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading categories:', err);
+      setError('No se pudieron cargar las categorías');
     }
   };
 
@@ -91,30 +85,24 @@ export function IncidentForm({ onSuccess }: IncidentFormProps) {
     setLoading(true);
 
     try {
-      const { error: insertError } = await supabase
-        .from('incidents')
-        .insert({
-          user_id: user.id,
-          category_id: formData.categoryId,
-          title: formData.title,
-          description: formData.description,
-          address: formData.address,
-          latitude: location?.lat || null,
-          longitude: location?.lng || null,
-          incident_date: formData.incidentDate,
-          priority: formData.priority,
-          status: 'pending',
-        });
-
-      if (insertError) throw insertError;
+      await incidents.create({
+        category_id: formData.category_id,
+        title: formData.title,
+        description: formData.description,
+        address: formData.address,
+        latitude: location?.lat || null,
+        longitude: location?.lng || null,
+        incident_date: formData.incident_date,
+        priority: formData.priority,
+      });
 
       setSuccess(true);
       setFormData({
-        categoryId: categories[0]?.id || '',
+        category_id: categoriesList[0]?.id || '',
         title: '',
         description: '',
         address: '',
-        incidentDate: new Date().toISOString().slice(0, 16),
+        incident_date: new Date().toISOString().slice(0, 16),
         priority: 'medium',
       });
       setLocation(null);
@@ -153,18 +141,18 @@ export function IncidentForm({ onSuccess }: IncidentFormProps) {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="category_id" className="block text-sm font-medium text-gray-700 mb-2">
               Tipo de Incidencia
             </label>
             <select
-              id="categoryId"
-              name="categoryId"
-              value={formData.categoryId}
+              id="category_id"
+              name="category_id"
+              value={formData.category_id}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             >
-              {categories.map((category) => (
+              {categoriesList.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -228,16 +216,16 @@ export function IncidentForm({ onSuccess }: IncidentFormProps) {
         </div>
 
         <div>
-          <label htmlFor="incidentDate" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="incident_date" className="block text-sm font-medium text-gray-700 mb-2">
             Fecha y Hora del Incidente
           </label>
           <div className="relative">
             <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
-              id="incidentDate"
-              name="incidentDate"
+              id="incident_date"
+              name="incident_date"
               type="datetime-local"
-              value={formData.incidentDate}
+              value={formData.incident_date}
               onChange={handleChange}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required

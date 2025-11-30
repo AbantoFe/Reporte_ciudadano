@@ -1,13 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Clock, MapPin, AlertCircle, Filter, Search, Trash2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Clock, MapPin, AlertCircle, Filter, Search } from 'lucide-react';
+import { incidents as incidentsAPI } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Database } from '../../lib/database.types';
-
-type Incident = Database['public']['Tables']['incidents']['Row'] & {
-  incident_categories: Database['public']['Tables']['incident_categories']['Row'];
-  profiles: Database['public']['Tables']['profiles']['Row'];
-};
+import { Incident } from '../../lib/types';
 
 const statusLabels = {
   pending: 'Pendiente',
@@ -43,12 +38,11 @@ interface IncidentListProps {
 
 export function IncidentList({ onSelectIncident }: IncidentListProps) {
   const { profile, user } = useAuth();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidentsList, setIncidents] = useState<Incident[]>([]);
   const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -58,22 +52,13 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
 
   useEffect(() => {
     filterIncidents();
-  }, [incidents, searchTerm, statusFilter, startDate, endDate]);
+  }, [incidentsList, searchTerm, statusFilter, startDate, endDate]);
 
   const loadIncidents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('incidents')
-        .select(`
-          *,
-          incident_categories(*),
-          profiles!incidents_user_id_fkey(*)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setIncidents(data || []);
-    } catch (err) {
+      const data = await incidentsAPI.list();
+      setIncidents(data);
+    } catch (err: any) {
       console.error('Error loading incidents:', err);
     } finally {
       setLoading(false);
@@ -81,7 +66,7 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
   };
 
   const filterIncidents = () => {
-    let filtered = [...incidents];
+    let filtered = [...incidentsList];
 
     if (profile?.role === 'citizen') {
       filtered = filtered.filter((incident) => incident.user_id === user?.id);
@@ -101,41 +86,19 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
     }
 
     if (startDate) {
-      const start = new Date(startDate);
-      filtered = filtered.filter((incident) => new Date(incident.incident_date) >= start);
+      filtered = filtered.filter((incident) => new Date(incident.incident_date) >= new Date(startDate));
     }
 
     if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((incident) => new Date(incident.incident_date) <= end);
+      filtered = filtered.filter((incident) => new Date(incident.incident_date) <= new Date(endDate));
     }
 
     setFilteredIncidents(filtered);
   };
 
-  const handleDeleteIncident = async (e: React.MouseEvent, incidentId: string) => {
-    e.stopPropagation();
-
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este reporte?')) {
-      return;
-    }
-
-    setDeleting(incidentId);
-    try {
-      const { error } = await supabase
-        .from('incidents')
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq('id', incidentId);
-
-      if (error) throw error;
-
-      setIncidents(incidents.filter((i) => i.id !== incidentId));
-    } catch (err) {
-      console.error('Error deleting incident:', err);
-      alert('Error al eliminar el reporte');
-    } finally {
-      setDeleting(null);
+  const handleSelectIncident = (incident: Incident) => {
+    if (onSelectIncident) {
+      onSelectIncident(incident);
     }
   };
 
@@ -148,8 +111,8 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
   }
 
   return (
-    <div>
-      <div className="mb-6 space-y-4">
+    <div className="space-y-4">
+      <div className="bg-gray-50 p-4 rounded-lg space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
@@ -157,126 +120,114 @@ export function IncidentList({ onSelectIncident }: IncidentListProps) {
             placeholder="Buscar por título, descripción o dirección..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           />
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <Filter className="w-5 h-5 text-gray-500" />
+        <div className="grid md:grid-cols-4 gap-2">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           >
             <option value="all">Todos los estados</option>
-            <option value="pending">Pendientes</option>
+            <option value="pending">Pendiente</option>
             <option value="in_progress">En Proceso</option>
-            <option value="resolved">Resueltas</option>
-            <option value="rejected">Rechazadas</option>
+            <option value="resolved">Resuelta</option>
+            <option value="rejected">Rechazada</option>
           </select>
 
-          {profile?.role === 'authority' && (
-            <>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                title="Fecha inicio"
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                title="Fecha fin"
-              />
-              {(startDate || endDate) && (
-                <button
-                  onClick={() => {
-                    setStartDate('');
-                    setEndDate('');
-                  }}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-                >
-                  Limpiar fechas
-                </button>
-              )}
-            </>
-          )}
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="Desde"
+          />
+
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            placeholder="Hasta"
+          />
+
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              setStatusFilter('all');
+              setStartDate('');
+              setEndDate('');
+            }}
+            className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm font-medium"
+          >
+            <Filter className="w-4 h-4" />
+            Limpiar
+          </button>
         </div>
       </div>
 
       {filteredIncidents.length === 0 ? (
         <div className="text-center py-12">
-          <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg">No se encontraron incidencias</p>
+          <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-600">No hay incidencias que mostrar</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredIncidents.map((incident) => (
             <div
               key={incident.id}
-              onClick={() => onSelectIncident?.(incident)}
-              className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => handleSelectIncident(incident)}
+              className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 pr-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span
-                      className="px-3 py-1 rounded-full text-xs font-semibold"
-                      style={{ backgroundColor: incident.incident_categories.color + '20', color: incident.incident_categories.color }}
-                    >
-                      {incident.incident_categories.name}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[incident.status]}`}>
-                      {statusLabels[incident.status]}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${priorityColors[incident.priority]}`}>
-                      {priorityLabels[incident.priority]}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{incident.title}</h3>
-                  <p className="text-gray-600 text-sm line-clamp-2">{incident.description}</p>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">{incident.title}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{incident.description.substring(0, 100)}...</p>
+                </div>
+                <div className="ml-4 text-right">
+                  <span
+                    className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                      statusColors[incident.status as keyof typeof statusColors]
+                    }`}
+                  >
+                    {statusLabels[incident.status as keyof typeof statusLabels]}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-6 text-sm text-gray-500">
+              <div className="flex flex-wrap gap-3 text-sm text-gray-600 mb-3">
+                {incident.category_name && (
+                  <div className="flex items-center gap-1">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: incident.category_color }}
+                    ></div>
+                    {incident.category_name}
+                  </div>
+                )}
                 {incident.address && (
                   <div className="flex items-center gap-1">
                     <MapPin className="w-4 h-4" />
-                    <span>{incident.address}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  <span>{new Date(incident.incident_date).toLocaleDateString('es-ES', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}</span>
-                </div>
-                {profile?.role === 'authority' && incident.profiles && (
-                  <div className="text-xs">
-                    Reportado por: {incident.profiles.full_name}
+                    {incident.address}
                   </div>
                 )}
               </div>
 
-              {profile?.role === 'citizen' && user?.id === incident.user_id && (
-                <div className="mt-4 pt-4 border-t border-gray-200 flex justify-end">
-                  <button
-                    onClick={(e) => handleDeleteIncident(e, incident.id)}
-                    disabled={deleting === incident.id}
-                    className="flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    {deleting === incident.id ? 'Eliminando...' : 'Eliminar'}
-                  </button>
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {new Date(incident.created_at).toLocaleDateString('es-ES')}
                 </div>
-              )}
+                <span
+                  className={`px-2 py-1 rounded text-xs font-medium ${
+                    priorityColors[incident.priority as keyof typeof priorityColors]
+                  }`}
+                >
+                  {priorityLabels[incident.priority as keyof typeof priorityLabels]}
+                </span>
+              </div>
             </div>
           ))}
         </div>

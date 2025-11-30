@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, AlertCircle, CheckCircle, Lock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
 
 interface ResetPasswordFormProps {
   onSuccess: () => void;
@@ -12,8 +11,6 @@ export function ResetPasswordForm({ onSuccess }: ResetPasswordFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const validatePassword = () => {
     if (!password) {
@@ -34,61 +31,27 @@ export function ResetPasswordForm({ onSuccess }: ResetPasswordFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess(false);
 
     if (!validatePassword()) {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.auth.updateUser({ password });
-
-      if (error) throw error;
-
-      setSuccess(true);
-      setPassword('');
-      setConfirmPassword('');
-
-      setTimeout(() => {
-        onSuccess();
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Error al restablecer la contraseña');
-    } finally {
-      setLoading(false);
-    }
+    setError('Para restablecer tu contraseña, contacta con el administrador.');
+    setTimeout(() => onSuccess(), 2000);
   };
 
   return (
     <div className="w-full max-w-md">
       <div className="bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-blue-100 rounded-full p-3">
-              <Lock className="w-8 h-8 text-blue-600" />
-            </div>
-          </div>
           <h2 className="text-3xl font-bold text-gray-900">Restablecer Contraseña</h2>
-          <p className="text-gray-600 mt-2">
-            Ingresa tu nueva contraseña
-          </p>
+          <p className="text-gray-600 mt-2">Ingresa tu nueva contraseña</p>
         </div>
 
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-red-800 text-sm">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <p className="text-green-800 text-sm">
-              Contraseña restablecida exitosamente. Redirigiendo...
-            </p>
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <p className="text-blue-800 text-sm">{error}</p>
           </div>
         )}
 
@@ -98,25 +61,22 @@ export function ResetPasswordForm({ onSuccess }: ResetPasswordFormProps) {
               Nueva Contraseña
             </label>
             <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ingresa tu nueva contraseña"
+                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="••••••••"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
@@ -126,35 +86,31 @@ export function ResetPasswordForm({ onSuccess }: ResetPasswordFormProps) {
               Confirmar Contraseña
             </label>
             <div className="relative">
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 id="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Confirma tu nueva contraseña"
+                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="••••••••"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showConfirmPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
           >
-            {loading ? 'Restableciendo...' : 'Restablecer Contraseña'}
+            Restablecer Contraseña
           </button>
         </form>
       </div>
